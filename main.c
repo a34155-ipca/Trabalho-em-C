@@ -1,449 +1,185 @@
-/***********************************************************************
- *  eSports Championship Manager 2025/26
- *  Trabalho de Algoritmos e Estruturas de Dados - Grupo de 2/3
- *  Um único ficheiro .c - Compila diretamente no CLion
- *  Autor: Os vossos nomes aqui
- ***********************************************************************/
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <ctype.h>
 
-#define MAX_EQUIPAS     16
-#define MAX_JOGADORES   80
-#define MAX_PARTIDAS    30
-#define MAX_NOME        50
-#define MAX_NICK        30
-
-/* ====================== ESTRUTURAS (REGISTOS) ====================== */
+// Estrutura para os jogadores
 typedef struct {
-    int id;
-    char nome[MAX_NOME];
-    char nickname[MAX_NICK];
-    int idade;
-    char role[20];
+    char nome[50];
+    char time[50];
+    int fase; // 1: Quartas, 2: Semi, 3: Final, 4: Campeão
 } Jogador;
 
-typedef struct {
-    int id;
-    char nome[MAX_NOME];
-    char tag[8];
-    int jogadores[5];        // índices dos 5 titulares no vetor global
-    int pontos;
-    int vitorias, derrotas, empates;
-} Equipa;
+// --- VARIÁVEIS GLOBAIS ---
+Jogador jogadores[8];
+int total = 0;
+int idioma = 1; // 1: Português, 2: Inglês
 
-typedef struct {
-    int equipa1, equipa2;
-    int golos1, golos2;      // ou rounds/kills
-    int jogada;
-} Partida;
-
-/* Lista ligada simples para histórico de partidas */
-typedef struct no {
-    Partida partida;
-    struct no* prox;
-} NoPartida;
-
-/* ====================== VARIÁVEIS GLOBAIS ====================== */
-Jogador jogadores[MAX_JOGADORES];
-Equipa equipas[MAX_EQUIPAS];
-Partida torneio[MAX_PARTIDAS];   // fase de grupos + playoff
-NoPartida* historico = NULL;
-
-int totalJogadores = 0;
-int totalEquipas = 0;
-int totalPartidas = 0;
-int torneioAtivo = 0;            // 0 = não criado, 1 = criado
-
-/* ====================== PROTÓTIPOS ====================== */
-void limpaBuffer();
-void pausa();
-void menuPrincipal();
-void menuJogadores();
-void menuEquipas();
-void menuTorneio();
-void demoAlgoritmos();
-
-/* ====================== FUNÇÕES AUXILIARES ====================== */
-void limpaBuffer() {
-    int c;
-    while ((c = getchar()) != '\n' && c != EOF);
+// Função auxiliar para tradução simplificada
+void texto(char *pt, char *en) {
+    if (idioma == 1) printf("%s", pt);
+    else printf("%s", en);
 }
 
-void pausa() {
-    printf("\nPrima ENTER para continuar...");
-    limpaBuffer();
+// Salva os dados em arquivo binário
+void salvarDados() {
+    FILE *f = fopen("torneio_fifa.dat", "wb");
+    if (f) {
+        fwrite(&total, sizeof(int), 1, f);
+        fwrite(&idioma, sizeof(int), 1, f); // Salva a preferência de idioma
+        fwrite(jogadores, sizeof(Jogador), total, f);
+        fclose(f);
+    }
 }
 
-void titulo(const char* txt) {
-    system("cls"); // Windows - usar "clear" no Linux/Mac
-    printf("=== %s ===\n\n", txt);
+// Carrega os dados ao iniciar
+void carregarDados() {
+    FILE *f = fopen("torneio_fifa.dat", "rb");
+    if (f) {
+        fread(&total, sizeof(int), 1, f);
+        fread(&idioma, sizeof(int), 1, f);
+        fread(jogadores, sizeof(Jogador), total, f);
+        fclose(f);
+    }
 }
 
-/* ====================== JOGADORES ====================== */
+// 1. Adicionar jogador
 void adicionarJogador() {
-    if (totalJogadores >= MAX_JOGADORES) {
-        printf("Limite de jogadores atingido!\n");
-        return;
-    }
+    if (total < 8) {
+        printf("\n--- "); texto("Cadastro", "Registration"); printf(" (%d/8) ---\n", total + 1);
+        texto("Nome do Jogador: ", "Player Name: ");
+        scanf(" %[^\n]s", jogadores[total].nome);
+        texto("Time: ", "Team: ");
+        scanf(" %[^\n]s", jogadores[total].time);
 
-    Jogador* j = &jogadores[totalJogadores];
-    j->id = totalJogadores + 1;
-
-    printf("Nome completo: ");
-    fgets(j->nome, MAX_NOME, stdin);
-    j->nome[strcspn(j->nome, "\n")] = '\0';
-
-    printf("Nickname: ");
-    fgets(j->nickname, MAX_NICK, stdin);
-    j->nickname[strcspn(j->nickname, "\n")] = '\0';
-
-    printf("Idade: ");
-    scanf("%d", &j->idade);
-    limpaBuffer();
-
-    printf("Role (ex: Top, Jungle, Mid, ADC, Support): ");
-    fgets(j->role, 20, stdin);
-    j->role[strcspn(j->role, "\n")] = '\0';
-
-    totalJogadores++;
-    printf("\nJogador %s adicionado com sucesso!\n", j->nickname);
-}
-
-void listarJogadores() {
-    if (totalJogadores == 0) {
-        printf("Nenhum jogador registado.\n");
-        return;
-    }
-    printf("%-4s %-20s %-15s %-6s %-15s\n", "ID", "Nome", "Nickname", "Idade", "Role");
-    printf("--------------------------------------------------------------------\n");
-    for (int i = 0; i < totalJogadores; i++) {
-        Jogador* j = &jogadores[i];
-        printf("%-4d %-20s %-15s %-6d %-15s\n", j->id, j->nome, j->nickname, j->idade, j->role);
-    }
-}
-
-/* ====================== EQUIPAS ====================== */
-void adicionarEquipa() {
-    if (totalEquipas >= MAX_EQUIPAS) {
-        printf("Limite de equipas atingido!\n");
-        return;
-    }
-    if (totalJogadores < 5) {
-        printf("Precisa de pelo menos 5 jogadores registados!\n");
-        return;
-    }
-
-    Equipa* e = &equipas[totalEquipas];
-    e->id = totalEquipas + 1;
-    e->pontos = e->vitorias = e->derrotas = e->empates = 0;
-
-    printf("Nome da equipa: ");
-    fgets(e->nome, MAX_NOME, stdin);
-    e->nome[strcspn(e->nome, "\n")] = '\0';
-
-    printf("Tag da equipa (ex: FNC): ");
-    fgets(e->tag, 8, stdin);
-    e->tag[strcspn(e->tag, "\n")] = '\0';
-
-    printf("\nEscolha 5 jogadores titulares (ID):\n");
-    for (int i = 0; i < 5; i++) {
-        int id;
-        do {
-            printf("Jogador %d (1-%d): ", i+1, totalJogadores);
-            scanf("%d", &id);
-        } while (id < 1 || id > totalJogadores);
-        e->jogadores[i] = id - 1; // índice no vetor
-        limpaBuffer();
-    }
-
-    totalEquipas++;
-    printf("\nEquipa %s [%s] criada com sucesso!\n", e->nome, e->tag);
-}
-
-void listarEquipas() {
-    if (totalEquipas == 0) {
-        printf("Nenhuma equipa registada.\n");
-        return;
-    }
-    for (int i = 0; i < totalEquipas; i++) {
-        Equipa* e = &equipas[i];
-        printf("\n[%d] %s (%s) - %d pontos (%dv %de %dd)\n",
-               e->id, e->nome, e->tag, e->pontos, e->vitorias, e->empates, e->derrotas);
-        printf("Titulares: ");
-        for (int j = 0; j < 5; j++) {
-            int idx = e->jogadores[j];
-            printf("%s ", jogadores[idx].nickname);
-        }
-        printf("\n");
-    }
-}
-
-/* ====================== TORNEIO ====================== */
-void criarTorneio() {
-    if (totalEquipas < 4) {
-        printf("Precisa de pelo menos 4 equipas!\n");
-        return;
-    }
-
-    torneioAtivo = 1;
-    totalPartidas = 0;
-
-    // Torneio simples: todos contra todos (liga) ou bracket 8/16
-    printf("Torneio criado com %d equipas!\n", totalEquipas);
-    printf("Pode agora simular jogos.\n");
-}
-
-void simularJogo() {
-    if (!torneioAtivo) {
-        printf("Primeiro crie o torneio!\n");
-        return;
-    }
-
-    int e1, e2;
-    printf("ID Equipa 1: ");
-    scanf("%d", &e1);
-    printf("ID Equipa 2: ");
-    scanf("%d", &e2);
-
-    if (e1 < 1 || e1 > totalEquipas || e2 < 1 || e2 > totalEquipas || e1 == e2) {
-        printf("Equipas inválidas!\n");
-        return;
-    }
-
-    // Simulação aleatória
-    int score1 = rand() % 3;     // 0, 1 ou 2 "golos"
-    int score2 = rand() % 3;
-
-    // Guardar na lista ligada (histórico)
-    NoPartida* novo = malloc(sizeof(NoPartida));
-    novo->partida.equipa1 = e1-1;
-    novo->partida.equipa2 = e2-1;
-    novo->partida.golos1 = score1;
-    novo->partida.golos2 = score2;
-    novo->partida.jogada = 1;
-    novo->prox = historico;
-    historico = novo;
-
-    // Atualizar estatísticas
-    Equipa* eq1 = &equipas[e1-1];
-    Equipa* eq2 = &equipas[e2-1];
-
-    if (score1 > score2) {
-        eq1->vitorias++;
-        eq1->pontos += 3;
-        eq2->derrotas++;
-    } else if (score2 > score1) {
-        eq2->vitorias++;
-        eq2->pontos += 3;
-        eq1->derrotas++;
+        jogadores[total].fase = 1;
+        total++;
+        salvarDados();
+        texto(">> Sucesso!\n", ">> Success!\n");
     } else {
-        eq1->empates++;
-        eq2->empates++;
-        eq1->pontos++;
-        eq2->pontos++;
+        texto("\n>> Erro: Limite de 8 atingido.\n", "\n>> Error: 8 players limit reached.\n");
     }
-
-    printf("\nResultado: %s %d - %d %s\n",
-           eq1->nome, score1, score2, eq2->nome);
 }
 
-/* ====================== ORDENAÇÃO E PESQUISA ====================== */
-int compararEquipas(const void* a, const void* b) {
-    Equipa* ea = (Equipa*)a;
-    Equipa* eb = (Equipa*)b;
-    if (eb->pontos != ea->pontos) return eb->pontos - ea->pontos;
-    return eb->vitorias - ea->vitorias;
-}
-
-void bubbleSortEquipas() {
-    for (int i = 0; i < totalEquipas-1; i++)
-        for (int j = 0; j < totalEquipas-i-1; j++)
-            if (compararEquipas(&equipas[j], &equipas[j+1]) > 0) {
-                Equipa temp = equipas[j];
-                equipas[j] = equipas[j+1];
-                equipas[j+1] = temp;
-            }
-}
-
-void quickSortEquipas(int esq, int dir) {
-    if (esq >= dir) return;
-
-    Equipa pivot = equipas[dir];
-    int i = esq - 1;
-
-    for (int j = esq; j < dir; j++) {
-        if (compararEquipas(&equipas[j], &pivot) <= 0) {
-            i++;
-            Equipa temp = equipas[i];
-            equipas[i] = equipas[j];
-            equipas[j] = temp;
-        }
-    }
-    i++;
-    equipas[dir] = equipas[i];
-    equipas[i] = pivot;
-
-    quickSortEquipas(esq, i-1);
-    quickSortEquipas(i+1, dir);
-}
-
-void mostrarClassificacao() {
-    if (!torneioAtivo) {
-        printf("Nenhum torneio ativo.\n");
+// 2. Listar jogadores
+void listarJogadores() {
+    if (total == 0) {
+        texto("\n>> Nenhum jogador cadastrado.\n", "\n>> No players registered.\n");
         return;
     }
-
-    // Usar qsort da biblioteca padrão (melhor desempenho)
-    qsort(equipas, totalEquipas, sizeof(Equipa), compararEquipas);
-
-    printf("\n=== CLASSIFICAÇÃO FINAL ===\n");
-    printf("%-4s %-20s %-8s %-6s %-4s %-4s %-4s %-6s\n",
-           "Pos", "Equipa", "Tag", "Pontos", "J", "V", "E", "D");
-    printf("--------------------------------------------------------------------\n");
-    for (int i = 0; i < totalEquipas; i++) {
-        Equipa* e = &equipas[i];
-        int jogos = e->vitorias + e->empates + e->derrotas;
-        printf("%-4d %-20s %-8s %-6d %-4d %-4d %-4d %-6d\n",
-               i+1, e->nome, e->tag, e->pontos, jogos,
-               e->vitorias, e->empates, e->derrotas);
+    printf("\n--- "); texto("Lista de Participantes", "Participants List"); printf(" ---\n");
+    for (int i = 0; i < total; i++) {
+        printf("%d. %s [%s]\n", i + 1, jogadores[i].nome, jogadores[i].time);
     }
 }
 
-/* ====================== MENU DEMO ALGORITMOS ====================== */
-void demoAlgoritmos() {
-    titulo("DEMO - ALGORITMOS DE ORDENAÇÃO E PESQUISA");
+// Função auxiliar para simular uma partida
+int realizarPartida(int id1, int id2) {
+    int g1 = rand() % 6;
+    int g2 = rand() % 6;
+    if (g1 == g2) g1++;
 
-    printf("1. Bubble Sort na classificação\n");
-    printf("2. Quick Sort recursivo na classificação\n");
-    printf("3. Pesquisa linear de jogador por nickname\n");
-    printf("4. Pesquisa binária de equipa por pontos (após ordenar)\n");
-    printf("0. Voltar\n");
+    printf("   %s %d x %d %s -> ", jogadores[id1].nome, g1, g2, jogadores[id2].nome);
+    texto("Venceu: ", "Winner: ");
 
-    int op;
-    scanf("%d", &op);
-    limpaBuffer();
-
-    char nick[30];
-    switch(op) {
-        case 1:
-            bubbleSortEquipas();
-            printf("Bubble Sort concluído!\n");
-            mostrarClassificacao();
-            break;
-        case 2:
-            quickSortEquipas(0, totalEquipas-1);
-            printf("Quick Sort recursivo concluído!\n");
-            mostrarClassificacao();
-            break;
-        case 3:
-            printf("Nickname a procurar: ");
-            fgets(nick, 30, stdin);
-            nick[strcspn(nick, "\n")] = '\0';
-            for (int i = 0; i < totalJogadores; i++) {
-                if (strcmp(jogadores[i].nickname, nick) == 0) {
-                    printf("Encontrado: %s (%s)\n", jogadores[i].nome, jogadores[i].role);
-                    return;
-                }
-            }
-            printf("Não encontrado.\n");
-            break;
-        case 4:
-            qsort(equipas, totalEquipas, sizeof(Equipa), compararEquipas);
-            // pesquisa binária simplificada por pontos
-            printf("Pesquisa binária implementada na apresentação ao vivo!\n");
-            break;
+    if (g1 > g2) {
+        printf("%s\n", jogadores[id1].nome);
+        return id1;
+    } else {
+        printf("%s\n", jogadores[id2].nome);
+        return id2;
     }
 }
 
-/* ====================== MENUS ====================== */
-void menuJogadores() {
-    int op;
-    do {
-        titulo("GESTÃO DE JOGADORES");
-        printf("1. Adicionar jogador\n");
-        printf("2. Listar jogadores\n");
-        printf("0. Voltar\n");
-        printf("Opção: ");
-        scanf("%d", &op);
-        limpaBuffer();
-
-        switch(op) {
-            case 1: adicionarJogador(); pausa(); break;
-            case 2: listarJogadores(); pausa(); break;
-        }
-    } while(op != 0);
-}
-
-void menuEquipas() {
-    int op;
-    do {
-        titulo("GESTÃO DE EQUIPAS");
-        printf("1. Adicionar equipa\n");
-        printf("2. Listar equipas\n");
-        printf("0. Voltar\n");
-        printf("Opção: ");
-        scanf("%d", &op);
-        limpaBuffer();
-
-        switch(op) {
-            case 1: adicionarEquipa(); pausa(); break;
-            case 2: listarEquipas(); pausa(); break;
-        }
-    } while(op != 0);
-}
-
-void menuTorneio() {
-    int op;
-    do {
-        titulo("TORNEIO");
-        printf("1. Criar torneio\n");
-        printf("2. Simular jogo\n");
-        printf("3. Mostrar classificação\n");
-        printf("0. Voltar\n");
-        printf("Opção: ");
-        scanf("%d", &op);
-        limpaBuffer();
-
-        switch(op) {
-            case 1: criarTorneio(); pausa(); break;
-            case 2: simularJogo(); pausa(); break;
-            case 3: mostrarClassificacao(); pausa(); break;
-        }
-    } while(op != 0);
-}
-
-void menuPrincipal() {
+// 3. Simular Torneio
+void simularTorneio() {
+    if (total < 8) {
+        texto("\n>> Erro: Sao necessarios 8 jogadores.\n", "\n>> Error: 8 players required.\n");
+        return;
+    }
     srand(time(NULL));
-    int op;
-    do {
-        titulo("eSports Championship Manager 2025/26");
-        printf("1. Gestão de Jogadores\n");
-        printf("2. Gestão de Equipas\n");
-        printf("3. Torneio\n");
-        printf("4. Demo Algoritmos de Ordenação e Pesquisa\n");
-        printf("0. Sair\n");
-        printf("Opção: ");
-        scanf("%d", &op);
-        limpaBuffer();
+    int s[4], f[2], campeao;
 
-        switch(op) {
-            case 1: menuJogadores(); break;
-            case 2: menuEquipas(); break;
-            case 3: menuTorneio(); break;
-            case 4: demoAlgoritmos(); pausa(); break;
-            case 0: printf("Obrigado por jogar! Boa sorte na apresentação!\n"); break;
-            default: printf("Opção inválida!\n"); pausa();
-        }
-    } while(op != 0);
+    texto("\n--- QUARTAS DE FINAL ---\n", "\n--- QUARTER-FINALS ---\n");
+    s[0] = realizarPartida(0, 1); jogadores[s[0]].fase = 2;
+    s[1] = realizarPartida(2, 3); jogadores[s[1]].fase = 2;
+    s[2] = realizarPartida(4, 5); jogadores[s[2]].fase = 2;
+    s[3] = realizarPartida(6, 7); jogadores[s[3]].fase = 2;
+
+    texto("\n--- SEMIFINAIS ---\n", "\n--- SEMI-FINALS ---\n");
+    f[0] = realizarPartida(s[0], s[1]); jogadores[f[0]].fase = 3;
+    f[1] = realizarPartida(s[2], s[3]); jogadores[f[1]].fase = 3;
+
+    texto("\n--- FINAL ---\n", "\n--- FINAL ---\n");
+    campeao = realizarPartida(f[0], f[1]); jogadores[campeao].fase = 4;
+
+    salvarDados();
+    texto("\n>> Simulacao concluida!\n", "\n>> Simulation finished!\n");
 }
 
-/* ====================== MAIN ====================== */
+// 4. Resultado
+void mostrarResultado() {
+    if (total == 0) {
+        texto("\n>> Sem dados.\n", "\n>> No data.\n");
+        return;
+    }
+    printf("\n--- "); texto("RESULTADOS FINAIS", "FINAL RESULTS"); printf(" ---\n");
+    for (int nivel = 4; nivel >= 1; nivel--) {
+        for (int i = 0; i < total; i++) {
+            if (jogadores[i].fase == nivel) {
+                if (nivel == 4) texto("[CAMPEAO] ", "[CHAMPION] ");
+                else if (nivel == 3) texto("[VICE]    ", "[RUNNER-UP] ");
+                else if (nivel == 2) texto("[SEMI]    ", "[SEMI]      ");
+                else texto("[QUARTAS] ", "[QUARTERS]  ");
+                printf("%s (%s)\n", jogadores[i].nome, jogadores[i].time);
+            }
+        }
+    }
+}
+
+// 5. Limpar Torneio
+void limparTorneio() {
+    total = 0;
+    remove("torneio_fifa.dat");
+    texto("\n>> Torneio resetado.\n", "\n>> Tournament reset.\n");
+}
+
+// 6. Alterar Idioma
+void alterarIdioma() {
+    printf("\nSelect / Selecione:\n1. Portugues\n2. English\n>> ");
+    scanf("%d", &idioma);
+    if (idioma != 1 && idioma != 2) idioma = 1;
+    salvarDados();
+}
+
 int main() {
-    // Para compilar no Linux/Mac mudar system("cls") para system("clear")
-    menuPrincipal();
+    carregarDados();
+    int opcao;
+
+    do {
+        printf("\n========= FIFA 26 =========");
+        texto("\n1. Adicionar jogador", "\n1. Add player");
+        texto("\n2. Listar jogadores",  "\n2. List players");
+        texto("\n3. Simular Torneio",  "\n3. Simulate Tournament");
+        texto("\n4. Resultado",         "\n4. Results");
+        texto("\n5. Limpar Torneio",    "\n5. Clear Tournament");
+        texto("\n6. Alterar Idioma",    "\n6. Change Language");
+        texto("\n0. Sair",              "\n0. Exit");
+        texto("\nEscolha: ",            "\nChoice: ");
+
+        if (scanf("%d", &opcao) != 1) break;
+
+        switch (opcao) {
+            case 1: adicionarJogador(); break;
+            case 2: listarJogadores(); break;
+            case 3: simularTorneio(); break;
+            case 4: mostrarResultado(); break;
+            case 5: limparTorneio(); break;
+            case 6: alterarIdioma(); break;
+            case 0: texto("Encerrando...\n", "Exiting...\n"); break;
+            default: texto("Opcao invalida!\n", "Invalid option!\n");
+        }
+    } while (opcao != 0);
+
     return 0;
 }
